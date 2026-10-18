@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:video_player/video_player.dart';
@@ -18,6 +19,7 @@ Future<void> main() async {
     url: _supabaseUrl,
     publishableKey: _supabasePublishableKey,
   );
+
   runApp(const DioxivetApp());
 }
 
@@ -40,8 +42,13 @@ class ConfigurationApp extends StatelessWidget {
                 children: const [
                   Icon(Icons.pets, size: 64, color: AppTheme.green),
                   SizedBox(height: 16),
-                  Text('Dioxivet Academy',
-                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                  Text(
+                    'Dioxivet Academy',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                   SizedBox(height: 12),
                   Text(
                     'التطبيق جاهز، لكن إعدادات Supabase غير موجودة. '
@@ -112,23 +119,28 @@ class Lesson {
     this.storagePath,
   });
 
-  factory Lesson.fromMap(Map<String, dynamic> row) => Lesson(
-        id: '${row['id'] ?? ''}',
-        title: '${row['title'] ?? 'محاضرة بدون عنوان'}',
-        description: '${row['description'] ?? ''}',
-        contentType: '${row['content_type'] ?? 'video'}',
-        contentUrl: row['content_url'] as String?,
-        storagePath: row['storage_path'] as String?,
-      );
+  factory Lesson.fromMap(Map<String, dynamic> row) {
+    return Lesson(
+      id: '${row['id'] ?? ''}',
+      title: '${row['title'] ?? 'محاضرة بدون عنوان'}',
+      description: '${row['description'] ?? ''}',
+      contentType: '${row['content_type'] ?? 'video'}',
+      contentUrl: row['content_url'] as String?,
+      storagePath: row['storage_path'] as String?,
+    );
+  }
 
   String resolveVideoUrl() {
     final direct = contentUrl?.trim() ?? '';
+
     if (direct.startsWith('https://') || direct.startsWith('http://')) {
       return direct;
     }
+
     final path = (storagePath?.trim().isNotEmpty ?? false)
         ? storagePath!.trim()
         : 'azareet.mp4.mp4';
+
     return Supabase.instance.client.storage
         .from('lecture-videos')
         .getPublicUrl(path);
@@ -156,12 +168,17 @@ class _HomePageState extends State<HomePage> {
         .from('lessons')
         .select('id,title,description,content_type,content_url,storage_path')
         .order('created_at', ascending: false);
+
     return (response as List)
         .map((row) => Lesson.fromMap(Map<String, dynamic>.from(row)))
         .toList();
   }
 
-  void _reload() => setState(() => _lessons = _loadLessons());
+  void _reload() {
+    setState(() {
+      _lessons = _loadLessons();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -171,8 +188,10 @@ class _HomePageState extends State<HomePage> {
           children: [
             Icon(Icons.pets, size: 28),
             SizedBox(width: 10),
-            Text('Dioxivet Academy',
-                style: TextStyle(fontWeight: FontWeight.w800)),
+            Text(
+              'Dioxivet Academy',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
           ],
         ),
         actions: [
@@ -184,7 +203,10 @@ class _HomePageState extends State<HomePage> {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: () async => _reload(),
+        onRefresh: () async {
+          _reload();
+          await _lessons;
+        },
         child: ListView(
           padding: const EdgeInsets.all(18),
           children: [
@@ -201,25 +223,33 @@ class _HomePageState extends State<HomePage> {
               child: const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('مرحبًا بك 👋',
-                      style: TextStyle(color: Colors.white70, fontSize: 15)),
+                  Text(
+                    'مرحبًا بك 👋',
+                    style: TextStyle(color: Colors.white70, fontSize: 15),
+                  ),
                   SizedBox(height: 8),
-                  Text('تعلّم الطب البيطري\nبخطوة كل يوم',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 25,
-                        height: 1.4,
-                        fontWeight: FontWeight.bold,
-                      )),
+                  Text(
+                    'تعلّم الطب البيطري\nبخطوة كل يوم',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 25,
+                      height: 1.4,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                   SizedBox(height: 12),
-                  Text('محاضراتك ومصادرك التعليمية في مكان واحد',
-                      style: TextStyle(color: Colors.white, fontSize: 14)),
+                  Text(
+                    'محاضراتك ومصادرك التعليمية في مكان واحد',
+                    style: TextStyle(color: Colors.white, fontSize: 14),
+                  ),
                 ],
               ),
             ),
             const SizedBox(height: 24),
-            const Text('المحاضرات',
-                style: TextStyle(fontSize: 21, fontWeight: FontWeight.bold)),
+            const Text(
+              'المحاضرات',
+              style: TextStyle(fontSize: 21, fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 12),
             FutureBuilder<List<Lesson>>(
               future: _lessons,
@@ -230,6 +260,7 @@ class _HomePageState extends State<HomePage> {
                     child: Center(child: CircularProgressIndicator()),
                   );
                 }
+
                 if (snapshot.hasError) {
                   return _MessageCard(
                     icon: Icons.cloud_off,
@@ -240,7 +271,9 @@ class _HomePageState extends State<HomePage> {
                     onPressed: _reload,
                   );
                 }
+
                 final lessons = snapshot.data ?? [];
+
                 if (lessons.isEmpty) {
                   return const _MessageCard(
                     icon: Icons.video_library_outlined,
@@ -248,16 +281,21 @@ class _HomePageState extends State<HomePage> {
                     message: 'بعد إضافة محاضرة إلى جدول lessons ستظهر هنا.',
                   );
                 }
+
                 return Column(
                   children: lessons
-                      .map((lesson) => _LessonCard(
-                            lesson: lesson,
-                            onTap: () => Navigator.of(context).push(
+                      .map(
+                        (lesson) => _LessonCard(
+                          lesson: lesson,
+                          onTap: () {
+                            Navigator.of(context).push(
                               MaterialPageRoute(
                                 builder: (_) => LessonPage(lesson: lesson),
                               ),
-                            ),
-                          ))
+                            );
+                          },
+                        ),
+                      )
                       .toList(),
                 );
               },
@@ -273,7 +311,10 @@ class _LessonCard extends StatelessWidget {
   final Lesson lesson;
   final VoidCallback onTap;
 
-  const _LessonCard({required this.lesson, required this.onTap});
+  const _LessonCard({
+    required this.lesson,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -288,15 +329,22 @@ class _LessonCard extends StatelessWidget {
             color: AppTheme.mint,
             borderRadius: BorderRadius.circular(15),
           ),
-          child: const Icon(Icons.play_circle_fill,
-              color: AppTheme.green, size: 32),
+          child: const Icon(
+            Icons.play_circle_fill,
+            color: AppTheme.green,
+            size: 32,
+          ),
         ),
-        title: Text(lesson.title,
-            style: const TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(
+          lesson.title,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 6),
           child: Text(
-            lesson.description.isEmpty ? 'اضغط لمشاهدة المحاضرة' : lesson.description,
+            lesson.description.isEmpty
+                ? 'اضغط لمشاهدة المحاضرة'
+                : lesson.description,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
@@ -332,14 +380,22 @@ class _MessageCard extends StatelessWidget {
           children: [
             Icon(icon, size: 42, color: AppTheme.green),
             const SizedBox(height: 12),
-            Text(title,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 17,
+              ),
+            ),
             const SizedBox(height: 8),
             SelectableText(message, textAlign: TextAlign.center),
             if (actionLabel != null) ...[
               const SizedBox(height: 14),
-              FilledButton(onPressed: onPressed, child: Text(actionLabel!)),
+              FilledButton(
+                onPressed: onPressed,
+                child: Text(actionLabel!),
+              ),
             ],
           ],
         ),
@@ -350,6 +406,7 @@ class _MessageCard extends StatelessWidget {
 
 class LessonPage extends StatefulWidget {
   final Lesson lesson;
+
   const LessonPage({super.key, required this.lesson});
 
   @override
@@ -371,20 +428,25 @@ class _LessonPageState extends State<LessonPage> {
     try {
       final url = widget.lesson.resolveVideoUrl();
       final controller = VideoPlayerController.networkUrl(Uri.parse(url));
+
       await controller.initialize();
+
       if (!mounted) {
         await controller.dispose();
         return;
       }
+
       setState(() {
         _controller = controller;
         _loading = false;
       });
     } catch (error) {
-      if (mounted) setState(() {
-        _error = error;
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _error = error;
+          _loading = false;
+        });
+      }
     }
   }
 
@@ -397,6 +459,7 @@ class _LessonPageState extends State<LessonPage> {
   @override
   Widget build(BuildContext context) {
     final controller = _controller;
+
     return Scaffold(
       appBar: AppBar(title: Text(widget.lesson.title)),
       body: ListView(
@@ -412,7 +475,8 @@ class _LessonPageState extends State<LessonPage> {
               clipBehavior: Clip.antiAlias,
               child: _loading
                   ? const Center(
-                      child: CircularProgressIndicator(color: Colors.white))
+                      child: CircularProgressIndicator(color: Colors.white),
+                    )
                   : _error != null
                       ? const Center(
                           child: Padding(
@@ -430,26 +494,39 @@ class _LessonPageState extends State<LessonPage> {
                             VideoPlayer(controller!),
                             IconButton.filled(
                               iconSize: 42,
-                              onPressed: () => setState(() {
+                              onPressed: () {
+                                setState(() {
+                                  if (controller.value.isPlaying) {
+                                    controller.pause();
+                                  } else {
+                                    controller.play();
+                                  }
+                                });
+                              },
+                              icon: Icon(
                                 controller.value.isPlaying
-                                    ? controller.pause()
-                                    : controller.play();
-                              }),
-                              icon: Icon(controller.value.isPlaying
-                                  ? Icons.pause
-                                  : Icons.play_arrow),
+                                    ? Icons.pause
+                                    : Icons.play_arrow,
+                              ),
                             ),
                           ],
                         ),
             ),
           ),
           const SizedBox(height: 20),
-          Text(widget.lesson.title,
-              style: const TextStyle(fontSize: 23, fontWeight: FontWeight.bold)),
+          Text(
+            widget.lesson.title,
+            style: const TextStyle(
+              fontSize: 23,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
           const SizedBox(height: 8),
-          Text(widget.lesson.description.isEmpty
-              ? 'محاضرة تعليمية من Dioxivet Academy.'
-              : widget.lesson.description),
+          Text(
+            widget.lesson.description.isEmpty
+                ? 'محاضرة تعليمية من Dioxivet Academy.'
+                : widget.lesson.description,
+          ),
           if (_error != null) ...[
             const SizedBox(height: 12),
             SelectableText('تفاصيل الخطأ: $_error'),
