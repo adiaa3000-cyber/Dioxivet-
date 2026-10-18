@@ -17,8 +17,6 @@ dependencies:
   video_player: ^2.9.2
   shared_preferences: 2.5.3
 
-dependency_overrides:
-  shared_preferences_android: 2.2.1
 
 dev_dependencies:
   flutter_test:
