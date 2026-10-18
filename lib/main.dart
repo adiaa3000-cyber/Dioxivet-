@@ -3,17 +3,21 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:video_player/video_player.dart';
 
-const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
-const supabaseKey =
+const String supabaseUrl =
+    String.fromEnvironment('SUPABASE_URL');
+
+const String supabaseKey =
     String.fromEnvironment('SUPABASE_PUBLISHABLE_KEY');
+
+const String videoBucket = 'lecture-videos';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   if (supabaseUrl.isEmpty || supabaseKey.isEmpty) {
-    runApp(const AppErrorApp(
-      message: 'إعدادات Supabase غير موجودة.\n'
-          'تحقق من إعدادات بناء التطبيق على GitHub.',
+    runApp(const DioxivetApp(
+      startupError:
+          'إعدادات Supabase غير موجودة. راجع أسرار GitHub Actions.',
     ));
     return;
   }
@@ -23,89 +27,35 @@ Future<void> main() async {
       url: supabaseUrl,
       publishableKey: supabaseKey,
     );
+
     runApp(const DioxivetApp());
-  } catch (e, stack) {
-    debugPrint('Supabase initialization failed: $e\n$stack');
-    runApp(AppErrorApp(message: 'فشل الاتصال بـ Supabase:\n$e'));
-  }
-}
-
-class AppTheme {
-  static const green = Color(0xFF176B52);
-  static const mint = Color(0xFFEAF5EF);
-
-  static ThemeData get light => ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: green),
-        scaffoldBackgroundColor: const Color(0xFFF7F9F8),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.white,
-          foregroundColor: green,
-        ),
-        cardTheme: CardThemeData(
-          color: Colors.white,
-          elevation: 1,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
-          ),
-        ),
-      );
-}
-
-class AppErrorApp extends StatelessWidget {
-  final String message;
-  const AppErrorApp({super.key, required this.message});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.light,
-      home: Scaffold(
-        body: SafeArea(
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.pets,
-                        size: 64, color: AppTheme.green),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Dioxivet Academy',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    SelectableText(
-                      message,
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
+  } catch (e) {
+    runApp(DioxivetApp(
+      startupError: 'تعذر تهيئة Supabase:\n$e',
+    ));
   }
 }
 
 class DioxivetApp extends StatelessWidget {
-  const DioxivetApp({super.key});
+  final String? startupError;
+
+  const DioxivetApp({super.key, this.startupError});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Dioxivet Academy',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.light,
-      home: const HomePage(),
+      theme: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF087F73),
+        ),
+        scaffoldBackgroundColor: const Color(0xFFF5F7F8),
+      ),
+      home: startupError == null
+          ? const HomePage()
+          : ErrorPage(message: startupError!),
     );
   }
 }
@@ -115,45 +65,122 @@ class Lesson {
   final String title;
   final String description;
   final String contentType;
-  final String? contentUrl;
-  final String? storagePath;
+  final String contentUrl;
+  final String storagePath;
 
   const Lesson({
     required this.id,
     required this.title,
     required this.description,
     required this.contentType,
-    this.contentUrl,
-    this.storagePath,
+    required this.contentUrl,
+    required this.storagePath,
   });
 
-  factory Lesson.fromMap(Map<String, dynamic> row) {
+  factory Lesson.fromMap(Map<String, dynamic> map) {
+    String readText(
+      List<String> keys, {
+      String fallback = '',
+    }) {
+      for (final key in keys) {
+        final value = map[key];
+
+        if (value != null &&
+            value.toString().trim().isNotEmpty) {
+          return value.toString().trim();
+        }
+      }
+
+      return fallback;
+    }
+
     return Lesson(
-      id: '${row['id'] ?? ''}',
-      title: '${row['title'] ?? 'محاضرة بدون عنوان'}',
-      description: '${row['description'] ?? ''}',
-      contentType: '${row['content_type'] ?? 'video'}',
-      contentUrl: row['content_url']?.toString(),
-      storagePath: row['storage_path']?.toString(),
+      id: readText(['id'], fallback: 'lesson'),
+      title: readText(
+        ['title', 'name', 'lesson_title'],
+        fallback: 'محاضرة بدون عنوان',
+      ),
+      description: readText(
+        ['description', 'details', 'subtitle'],
+        fallback: 'اضغط لمشاهدة المحاضرة',
+      ),
+      contentType: readText(
+        ['content_type', 'type', 'media_type'],
+        fallback: 'video',
+      ),
+      contentUrl: readText(
+        ['content_url', 'video_url', 'url', 'file_url'],
+      ),
+      storagePath: readText(
+        [
+          'storage_path',
+          'content_path',
+          'file_path',
+          'video_path',
+          'storage_url',
+        ],
+      ),
     );
   }
+}
 
-  String resolveVideoUrl() {
-    final direct = contentUrl?.trim() ?? '';
+class LessonService {
+  static final SupabaseClient _client =
+      Supabase.instance.client;
 
-    if (direct.startsWith('https://') ||
-        direct.startsWith('http://')) {
-      return direct;
+  static Future<List<Lesson>> loadLessons() async {
+    final response = await _client
+        .from('lessons')
+        .select();
+
+    final rows =
+        List<Map<String, dynamic>>.from(response);
+
+    final lessons =
+        rows.map((row) => Lesson.fromMap(row)).toList();
+
+    lessons.sort((a, b) => a.title.compareTo(b.title));
+
+    return lessons;
+  }
+
+  static Future<String> resolveVideoUrl(
+    Lesson lesson,
+  ) async {
+    final directUrl = lesson.contentUrl;
+
+    if (directUrl.startsWith('https://') ||
+        directUrl.startsWith('http://')) {
+      return directUrl;
     }
 
-    final path = storagePath?.trim() ?? '';
+    // استخدام مسار التخزين لو موجود.
+    var path = lesson.storagePath;
+
+    // التعديل المطلوب: الفيديو الافتراضي لأي محاضرة
+    // لا يوجد لها رابط مباشر أو مسار مسجل.
     if (path.isEmpty) {
-      throw Exception('مسار الفيديو غير موجود في جدول lessons');
+      path = 'azareet.mp4.mp4';
     }
 
-    return Supabase.instance.client.storage
-        .from('lecture-videos')
-        .getPublicUrl(path);
+    if (path.startsWith('https://') ||
+        path.startsWith('http://')) {
+      return path;
+    }
+
+    path = path.replaceFirst(RegExp(r'^/+'), '');
+
+    try {
+      return await _client.storage
+          .from(videoBucket)
+          .createSignedUrl(path, 3600);
+    } catch (e) {
+      throw Exception(
+        'تعذر الوصول إلى الفيديو: $path\n'
+        'تأكد من وجود الملف داخل Bucket باسم '
+        '$videoBucket ومن صلاحيات Storage.\n$e',
+      );
+    }
   }
 }
 
@@ -165,249 +192,158 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  late Future<List<Lesson>> lessonsFuture;
+  late Future<List<Lesson>> _lessonsFuture;
 
   @override
   void initState() {
     super.initState();
-    lessonsFuture = loadLessons();
+    _lessonsFuture = LessonService.loadLessons();
   }
 
-  Future<List<Lesson>> loadLessons() async {
-    final rows = await Supabase.instance.client
-        .from('lessons')
-        .select(
-          'id,title,description,content_type,content_url,storage_path',
-        )
-        .order('created_at', ascending: false);
+  Future<void> _refresh() async {
+    setState(() {
+      _lessonsFuture = LessonService.loadLessons();
+    });
 
-    return (rows as List)
-        .map((row) =>
-            Lesson.fromMap(Map<String, dynamic>.from(row)))
-        .toList();
-  }
-
-  Future<void> reload() async {
-    final future = loadLessons();
-    setState(() => lessonsFuture = future);
-    await future;
+    await _lessonsFuture;
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Row(
-          children: [
-            Icon(Icons.pets),
-            SizedBox(width: 10),
-            Text(
-              'Dioxivet Academy',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ],
+        title: const Text(
+          'Dioxivet Academy',
+          style: TextStyle(fontWeight: FontWeight.bold),
         ),
+        centerTitle: true,
+        backgroundColor:
+            Theme.of(context).colorScheme.primary,
+        foregroundColor: Colors.white,
         actions: [
           IconButton(
-            onPressed: () {
-              reload().catchError((_) {});
-            },
-            icon: const Icon(Icons.refresh),
             tooltip: 'تحديث المحاضرات',
+            onPressed: _refresh,
+            icon: const Icon(Icons.refresh),
           ),
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: () async {
-          await reload();
-        },
-        child: ListView(
-          padding: const EdgeInsets.all(18),
-          children: [
-            Container(
-              padding: const EdgeInsets.all(22),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [
-                    AppTheme.green,
-                    Color(0xFF29916D),
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'مرحبًا بك 👋',
-                    style: TextStyle(color: Colors.white70),
+        onRefresh: _refresh,
+        child: FutureBuilder<List<Lesson>>(
+          future: _lessonsFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState ==
+                ConnectionState.waiting) {
+              return const Center(
+                child: CircularProgressIndicator(),
+              );
+            }
+
+            if (snapshot.hasError) {
+              return ErrorContent(
+                title: 'تعذر تحميل المحاضرات',
+                message: _friendlyError(snapshot.error),
+                onRetry: _refresh,
+              );
+            }
+
+            final lessons = snapshot.data ?? [];
+
+            if (lessons.isEmpty) {
+              return ListView(
+                physics:
+                    const AlwaysScrollableScrollPhysics(),
+                children: const [
+                  SizedBox(height: 110),
+                  Icon(
+                    Icons.video_library_outlined,
+                    size: 76,
+                    color: Colors.grey,
+                  ),
+                  SizedBox(height: 16),
+                  Center(
+                    child: Text(
+                      'لا توجد محاضرات حتى الآن',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                   SizedBox(height: 8),
-                  Text(
-                    'تعلّم الطب البيطري\nبخطوة كل يوم',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 25,
-                      fontWeight: FontWeight.bold,
+                  Padding(
+                    padding: EdgeInsets.all(20),
+                    child: Text(
+                      'أضف محاضرة إلى جدول lessons '
+                      'في Supabase، ثم اضغط تحديث.',
+                      textAlign: TextAlign.center,
                     ),
-                  ),
-                  SizedBox(height: 12),
-                  Text(
-                    'محاضراتك ومصادرك التعليمية في مكان واحد',
-                    style: TextStyle(color: Colors.white),
                   ),
                 ],
-              ),
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              'المحاضرات',
-              style: TextStyle(
-                fontSize: 21,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 12),
-            FutureBuilder<List<Lesson>>(
-              future: lessonsFuture,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState ==
-                    ConnectionState.waiting) {
-                  return const Padding(
-                    padding: EdgeInsets.all(32),
-                    child: Center(
-                      child: CircularProgressIndicator(),
-                    ),
-                  );
-                }
+              );
+            }
 
-                if (snapshot.hasError) {
-                  return MessageCard(
-                    icon: Icons.cloud_off,
-                    title: 'تعذر تحميل المحاضرات',
-                    message:
-                        'تحقق من جدول lessons وصلاحيات القراءة '
-                        'وإعدادات Supabase.\n\n${snapshot.error}',
-                    buttonText: 'إعادة المحاولة',
-                    onPressed: () {
-                      reload().catchError((_) {});
-                    },
-                  );
-                }
-
-                final items = snapshot.data ?? [];
-
-                if (items.isEmpty) {
-                  return const MessageCard(
-                    icon: Icons.video_library_outlined,
-                    title: 'لا توجد محاضرات',
-                    message:
-                        'أضف محاضرة إلى جدول lessons في Supabase.',
-                  );
-                }
-
-                return Column(
-                  children: items.map((lesson) {
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.all(14),
-                        leading: Container(
-                          width: 52,
-                          height: 52,
-                          decoration: BoxDecoration(
-                            color: AppTheme.mint,
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          child: const Icon(
-                            Icons.play_circle_fill,
-                            size: 32,
-                            color: AppTheme.green,
-                          ),
+            return ListView(
+              physics:
+                  const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(16),
+              children: [
+                const Text(
+                  'المحاضرات التعليمية',
+                  style: TextStyle(
+                    fontSize: 23,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text('عدد المحاضرات: ${lessons.length}'),
+                const SizedBox(height: 16),
+                for (final lesson in lessons)
+                  Card(
+                    margin:
+                        const EdgeInsets.only(bottom: 12),
+                    clipBehavior: Clip.antiAlias,
+                    child: ListTile(
+                      contentPadding:
+                          const EdgeInsets.all(16),
+                      leading: CircleAvatar(
+                        backgroundColor: Theme.of(context)
+                            .colorScheme
+                            .primaryContainer,
+                        child: const Icon(
+                          Icons.play_circle_outline,
                         ),
-                        title: Text(
-                          lesson.title,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        subtitle: Text(
-                          lesson.description.isEmpty
-                              ? 'اضغط لمشاهدة المحاضرة'
-                              : lesson.description,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        trailing:
-                            const Icon(Icons.chevron_right),
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  LessonPage(lesson: lesson),
-                            ),
-                          );
-                        },
                       ),
-                    );
-                  }).toList(),
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class MessageCard extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String message;
-  final String? buttonText;
-  final VoidCallback? onPressed;
-
-  const MessageCard({
-    super.key,
-    required this.icon,
-    required this.title,
-    required this.message,
-    this.buttonText,
-    this.onPressed,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(22),
-        child: Column(
-          children: [
-            Icon(icon, size: 42, color: AppTheme.green),
-            const SizedBox(height: 12),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 17,
-              ),
-            ),
-            const SizedBox(height: 8),
-            SelectableText(
-              message,
-              textAlign: TextAlign.center,
-            ),
-            if (buttonText != null) ...[
-              const SizedBox(height: 14),
-              FilledButton(
-                onPressed: onPressed,
-                child: Text(buttonText!),
-              ),
-            ],
-          ],
+                      title: Text(
+                        lesson.title,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      subtitle: Padding(
+                        padding:
+                            const EdgeInsets.only(top: 8),
+                        child: Text(lesson.description),
+                      ),
+                      trailing: const Icon(
+                        Icons.arrow_forward_ios,
+                        size: 18,
+                      ),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                LessonPage(lesson: lesson),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -417,189 +353,246 @@ class MessageCard extends StatelessWidget {
 class LessonPage extends StatefulWidget {
   final Lesson lesson;
 
-  const LessonPage({super.key, required this.lesson});
+  const LessonPage({
+    super.key,
+    required this.lesson,
+  });
 
   @override
   State<LessonPage> createState() => _LessonPageState();
 }
 
 class _LessonPageState extends State<LessonPage> {
-  VideoPlayerController? controller;
-  String? errorMessage;
-  bool loading = true;
+  VideoPlayerController? _controller;
+  bool _loading = true;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
-    initializeVideo();
+    _initializeVideo();
   }
 
-  Future<void> initializeVideo() async {
-    VideoPlayerController? newController;
-
-    setState(() {
-      loading = true;
-      errorMessage = null;
-    });
+  Future<void> _initializeVideo() async {
+    VideoPlayerController? controller;
 
     try {
-      final url = widget.lesson.resolveVideoUrl();
-      newController =
-          VideoPlayerController.networkUrl(Uri.parse(url));
+      final url = await LessonService.resolveVideoUrl(
+        widget.lesson,
+      );
 
-      await newController.initialize();
+      controller = VideoPlayerController.networkUrl(
+        Uri.parse(url),
+      );
+
+      _controller = controller;
+
+      await controller.initialize();
 
       if (!mounted) {
-        await newController.dispose();
+        await controller.dispose();
         return;
       }
 
       setState(() {
-        controller = newController;
-        loading = false;
+        _loading = false;
+        _error = null;
       });
-    } catch (e, stack) {
-      debugPrint('Video initialization failed: $e\n$stack');
-      await newController?.dispose();
-
+    } catch (e) {
       if (!mounted) return;
 
       setState(() {
-        errorMessage = '$e';
-        loading = false;
+        _loading = false;
+        _error = _friendlyError(e);
       });
     }
   }
 
   @override
   void dispose() {
-    controller?.dispose();
+    _controller?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final video = controller;
+    final controller = _controller;
 
     return Scaffold(
-      appBar: AppBar(title: Text(widget.lesson.title)),
+      appBar: AppBar(
+        title: Text(widget.lesson.title),
+      ),
       body: ListView(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(16),
         children: [
-          AspectRatio(
-            aspectRatio:
-                video != null && video.value.isInitialized
-                    ? video.value.aspectRatio
-                    : 16 / 9,
-            child: Container(
-              clipBehavior: Clip.antiAlias,
-              decoration: BoxDecoration(
-                color: Colors.black,
-                borderRadius: BorderRadius.circular(18),
+          if (_loading)
+            const SizedBox(
+              height: 220,
+              child: Center(
+                child: CircularProgressIndicator(),
               ),
-              child: loading
-                  ? const Center(
-                      child: CircularProgressIndicator(
-                        color: Colors.white,
+            )
+          else if (_error != null)
+            ErrorContent(
+              title: 'تعذر تشغيل الفيديو',
+              message: _error!,
+              onRetry: () {
+                setState(() {
+                  _loading = true;
+                  _error = null;
+                });
+                _initializeVideo();
+              },
+            )
+          else if (controller != null &&
+              controller.value.isInitialized)
+            Column(
+              children: [
+                AspectRatio(
+                  aspectRatio:
+                      controller.value.aspectRatio > 0
+                          ? controller.value.aspectRatio
+                          : 16 / 9,
+                  child: VideoPlayer(controller),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    IconButton(
+                      iconSize: 36,
+                      onPressed: () {
+                        if (controller.value.isPlaying) {
+                          controller.pause();
+                        } else {
+                          controller.play();
+                        }
+
+                        setState(() {});
+                      },
+                      icon: Icon(
+                        controller.value.isPlaying
+                            ? Icons.pause_circle
+                            : Icons.play_circle,
                       ),
-                    )
-                  : errorMessage != null
-                      ? Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(
-                                  Icons.error_outline,
-                                  color: Colors.white,
-                                  size: 36,
-                                ),
-                                const SizedBox(height: 8),
-                                const Text(
-                                  'تعذر تشغيل الفيديو',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  errorMessage!,
-                                  style: const TextStyle(
-                                    color: Colors.white70,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
-                                TextButton(
-                                  onPressed: initializeVideo,
-                                  child: const Text('إعادة المحاولة'),
-                                ),
-                              ],
-                            ),
-                          ),
-                        )
-                      : video == null
-                          ? const Center(
-                              child: Text(
-                                'الفيديو غير جاهز',
-                                style: TextStyle(color: Colors.white),
-                              ),
-                            )
-                          : Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                VideoPlayer(video),
-                                IconButton.filled(
-                                  iconSize: 44,
-                                  onPressed: () {
-                                    if (video.value.isPlaying) {
-                                      video.pause();
-                                    } else {
-                                      video.play();
-                                    }
-                                    setState(() {});
-                                  },
-                                  icon: Icon(
-                                    video.value.isPlaying
-                                        ? Icons.pause
-                                        : Icons.play_arrow,
-                                  ),
-                                ),
-                                Positioned(
-                                  left: 8,
-                                  right: 8,
-                                  bottom: 4,
-                                  child: VideoProgressIndicator(
-                                    video,
-                                    allowScrubbing: true,
-                                    colors: const VideoProgressColors(
-                                      playedColor: Colors.greenAccent,
-                                      bufferedColor: Colors.white54,
-                                      backgroundColor: Colors.white24,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
+                    ),
+                    Expanded(
+                      child: VideoProgressIndicator(
+                        controller,
+                        allowScrubbing: true,
+                        padding:
+                            const EdgeInsets.symmetric(
+                          vertical: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-          ),
           const SizedBox(height: 20),
           Text(
             widget.lesson.title,
             style: const TextStyle(
-              fontSize: 23,
+              fontSize: 22,
               fontWeight: FontWeight.bold,
             ),
           ),
           const SizedBox(height: 8),
-          Text(
-            widget.lesson.description.isEmpty
-                ? 'محاضرة تعليمية من Dioxivet Academy.'
-                : widget.lesson.description,
-          ),
+          Text(widget.lesson.description),
         ],
       ),
     );
   }
+}
+
+class ErrorPage extends StatelessWidget {
+  final String message;
+
+  const ErrorPage({
+    super.key,
+    required this.message,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: ErrorContent(
+        title: 'تعذر تشغيل التطبيق',
+        message: message,
+        onRetry: () {},
+      ),
+    );
+  }
+}
+
+class ErrorContent extends StatelessWidget {
+  final String title;
+  final String message;
+  final VoidCallback onRetry;
+
+  const ErrorContent({
+    super.key,
+    required this.title,
+    required this.message,
+    required this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.error_outline,
+              size: 64,
+              color: Colors.red,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 21,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            SelectableText(
+              message,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            FilledButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh),
+              label: const Text('إعادة المحاولة'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+String _friendlyError(Object? error) {
+  final message = error?.toString() ?? 'خطأ غير معروف';
+
+  if (message.contains('permission') ||
+      message.contains('42501') ||
+      message.contains('RLS')) {
+    return 'لا توجد صلاحية لقراءة البيانات. '
+        'راجع سياسات RLS في Supabase.\n$message';
+  }
+
+  if (message.contains('lessons') ||
+      message.contains('column') ||
+      message.contains('does not exist')) {
+    return 'تعذر قراءة جدول lessons. '
+        'راجع اسم الجدول وصلاحياته.\n$message';
+  }
+
+  return message;
 }
